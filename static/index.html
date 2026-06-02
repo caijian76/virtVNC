@@ -1,68 +1,179 @@
 <html>
-  <meta charset="utf-8">
-    <style>
-     td {
-        padding: 5px;
-     }
-     .button {
-       background-color: white;
-       border: 2px solid black;
-       color: black;
-       padding: 5px;
-       text-align: center;
-       text-decoration: none;
-       display: inline-block;
-       font-size: 16px;
-       -webkit-transition-duration: 0.4s; /* Safari */
-       transition-duration: 0.4s;
-     }
-     .button:hover{
-       background-color: black;
-       color: white;
-       cursor: pointer;
-     }
-     button[disabled] {
-       opacity: .65;
-     }
-     button[disabled]:hover {
-       color: black;
-       background: white;
-     }
-   </style>
-    <!-- Promise polyfill for IE11 -->
-    <script src="vendor/promise.js"></script>
+<meta charset="utf-8">
 
-    <!-- ES2015/ES6 modules polyfill -->
-    <script nomodule src="vendor/browser-es-module-loader/dist/browser-es-module-loader.js"></script>
+<head>
+  <title>虚拟机管理</title>
+</head>
+<style>
+  td {
+    padding: 5px;
+  }
 
+  .button {
+    background-color: white;
+    border: 2px solid black;
+    color: black;
+    padding: 5px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    -webkit-transition-duration: 0.4s;
+    /* Safari */
+    transition-duration: 0.4s;
+  }
 
-    <script type="module" crossorigin="anonymous">
-      import * as WebUtil from "./app/webutil.js";
-      const apiPrefix='k8s/apis'
+  .button:hover {
+    background-color: black;
+    color: white;
+    cursor: pointer;
+  }
 
-      function loadVMI(namespace) {
-        WebUtil.fetchJSON('/' + apiPrefix + '/kubevirt.io/v1alpha3/namespaces/' + namespace + '/virtualmachineinstances/')
-          .then((resp) => {
-            let vmis = []; 
-            resp.items.forEach(i => {
-              let tr = document.createElement('tr');
-              tr.innerHTML="<td>" + i.metadata.name + "</td><td>" + String(i.status.phase) + "</td><td>" + String(i.status.interfaces !== undefined ? i.status.interfaces[0].ipAddress : '')  + "</td><td>" + String(i.status.nodeName !== undefined ? i.status.nodeName : '') + "</td><td><button class='button' " + String(i.status.phase =="Running" ? "" : "disabled")  + " onclick=\"window.open('vnc_lite.html?path=" + apiPrefix + "/subresources.kubevirt.io/v1alpha3/namespaces/" + namespace + "/virtualmachineinstances/" + i.metadata.name + "/vnc', 'novnc_window', 'resizable=yes,toolbar=no,location=no,status=no,scrollbars=no,menubar=no,width=1030,height=800')\">VNC</button></td>";
-              document.getElementById("vmis").appendChild(tr);
-            });
-            if (resp.items.length === 0) { 
-              document.body.append("No virtual machines in the namespace.");
-            }
-          })
-          .catch(err => console.log("Failed to get vmis: " + err));
-       }
-       let namespace = WebUtil.getQueryVar('namespace', 'default');
+  button[disabled] {
+    opacity: .65;
+  }
 
-       loadVMI(namespace);
-    </script>
-  </meta>
+  button[disabled]:hover {
+    color: black;
+    background: white;
+  }
 
-  <body>
-   <table><tbody id="vmis">
-   </tbody></table>
-  </body>
+  #loginForm {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #loginFormDov {
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px 2px rgba(0, 0, 0, 0.099);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .inputDiv {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 20px;
+  }
+
+  #notAccountText,
+  #notPasswordText,
+  #ErrorAccountOrPassword {
+    display: none;
+    color: red;
+    font-size: 12px;
+  }
+</style>
+<!-- Promise polyfill for IE11 -->
+<script src="vendor/promise.js"></script>
+
+<!-- ES2015/ES6 modules polyfill -->
+<script nomodule src="vendor/browser-es-module-loader/dist/browser-es-module-loader.js"></script>
+<script src="vendor/crypto-js.min.js"></script>
+
+<script type="module" crossorigin="anonymous">
+  import * as WebUtil from "./app/webutil.js";
+  const apiPrefix = 'k8s/apis'
+  function loadVMI(namespace) {
+    WebUtil.fetchJSON('/' + apiPrefix + '/kubevirt.io/v1alpha3/namespaces/' + namespace + '/virtualmachineinstances/')
+      .then((resp) => {
+        let vmis = [];
+        resp.items.forEach(i => {
+          let tr = document.createElement('tr');
+          tr.innerHTML = "<td>" + i.metadata.name + "</td><td>" + String(i.status.phase) + "</td><td>" + String(i.status.interfaces !== undefined ? i.status.interfaces[0].ipAddress : '') + "</td><td>" + String(i.status.nodeName !== undefined ? i.status.nodeName : '') + "</td><td><button class='button' " + String(i.status.phase == "Running" ? "" : "disabled") + " onclick=\"window.open('vnc_lite.html?path=" + apiPrefix + "/subresources.kubevirt.io/v1alpha3/namespaces/" + namespace + "/virtualmachineinstances/" + i.metadata.name + "/vnc', 'novnc_window', 'resizable=yes,toolbar=no,location=no,status=no,scrollbars=no,menubar=no,width=1030,height=800')\">VNC</button></td>";
+          document.getElementById("vmis").appendChild(tr);
+        });
+        if (resp.items.length === 0) {
+          document.body.append("No virtual machines in the namespace.");
+        }
+      })
+      .catch(err => console.log("Failed to get vmis: " + err));
+  }
+  let namespace = WebUtil.getQueryVar('namespace', 'default');
+  const setCookie = (data) => {
+    const sessionToken = btoa(`${data.account}:${data.password}`);
+    document.cookie = `educoder_WebUtil_login_session_token=${sessionToken}; max-age=${60 * 60}; path=/`;
+  }
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  }
+  const hashWithSHA256 = async (text) => {
+    return CryptoJS.SHA256(text).toString(CryptoJS.enc.Hex);
+  };
+  async function handleIsloginOk({ account, password }) {
+    const loginpassword = "8cc900e6c764589e16af6ecaa823c467f908938f59f0eaf67b0ed094dfc5a6c4";
+    const userLogin = await hashWithSHA256(`${account}:${password}`)
+    if (userLogin === loginpassword) {
+      return true
+    }
+    return false
+  }
+  window.onload = () => {
+    const loginButton = document.getElementById("loginButton");
+    const loginForm = document.getElementById("loginForm");
+    if (loginButton && loginForm) {
+      loginButton.addEventListener("click", async () => {
+        const account = document.getElementById("account").value;
+        const password = document.getElementById("password").value;
+        const notAccountText = document.getElementById("notAccountText");
+        const notPasswordText = document.getElementById("notPasswordText");
+        const ErrorAccountOrPassword = document.getElementById("ErrorAccountOrPassword");
+        const isloginOk = await handleIsloginOk({ account, password })
+        notAccountText.style.display = !account ? "block" : "none"
+        notPasswordText.style.display = !password ? "block" : "none"
+        ErrorAccountOrPassword.style.display = ((!!account && !!password) && !isloginOk) ? "block" : "none"
+        if (isloginOk) {
+          setCookie({ account, password })
+          document.body.removeChild(loginForm);
+          loadVMI(namespace);
+        }
+      });
+    }
+    const sessionToken = getCookie('educoder_WebUtil_login_session_token');
+    if (sessionToken && loginForm) {
+      document.body.removeChild(loginForm);
+      loadVMI(namespace);
+    }
+  }
+</script>
+</meta>
+
+<body>
+  <table>
+    <tbody id="vmis"></tbody>
+  </table>
+  <div id="loginForm">
+    <div id="loginFormDov">
+      <div style="font-size: 20px; text-align: center;font-weight: 600;margin-bottom: 20px;">虚拟机管理</div>
+      <div class="inputDiv">
+        <span style="line-height: 30px;">账号</span>
+        <div style="display: flex;flex-direction: column;">
+          <input id="account" type="text" style="height: 30px;" />
+          <div style="height: 20px;">
+            <span id="notAccountText">请输入账号</span>
+          </div>
+        </div>
+      </div>
+      <div class="inputDiv">
+        <span style="line-height: 30px;">密码</span>
+        <div style="display: flex;flex-direction: column;">
+          <input id="password" type="password" style="height: 30px;" />
+          <div style="height: 20px;">
+            <span id="notPasswordText">请输入密码</span>
+            <span id="ErrorAccountOrPassword">账号或密码错误</span>
+          </div>
+        </div>
+      </div>
+      <button id="loginButton" style="cursor:pointer;height: 30px;">登录</button>
+    </div>
+  </div>
+</body>
+
 </html>
